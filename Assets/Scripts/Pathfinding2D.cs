@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 public class Pathfinding2D : MonoBehaviour
 {
-    public Transform target; 
+    public Transform target; // The target Transform this agent is seeking
     private Grid2D grid;
     private Node2D seekerNode, targetNode;
     public GameObject GridOwner;
@@ -84,7 +84,6 @@ public class Pathfinding2D : MonoBehaviour
         // Store the path in the Grid2D manager for this seeker
         grid.SetPath(transform, path);
     }
-
 
     private int GetDistance(Node2D nodeA, Node2D nodeB)
     {
