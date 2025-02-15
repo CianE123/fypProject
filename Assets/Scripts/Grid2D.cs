@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -10,7 +9,6 @@ public class Grid2D : MonoBehaviour
     public Node2D[,] Grid;
     public Tilemap obstaclemap;
 
-    // Stores paths for multiple seekers
     public Dictionary<Transform, List<Node2D>> paths = new Dictionary<Transform, List<Node2D>>();
 
     Vector3 worldBottomLeft;
@@ -71,7 +69,6 @@ public class Grid2D : MonoBehaviour
         return Grid[x, y];
     }
 
-    // Add or update a path for a specific seeker
     public void SetPath(Transform seeker, List<Node2D> path)
     {
         if (paths.ContainsKey(seeker))
@@ -84,13 +81,83 @@ public class Grid2D : MonoBehaviour
         }
     }
 
-    // Draws visual representation of the grid and paths
+    private List<Node2D> DetectCollisions()
+    {
+        // Tracks arrival times for each node
+        Dictionary<Node2D, Dictionary<int, int>> nodeArrivalTimes = new Dictionary<Node2D, Dictionary<int, int>>();
+        // Tracks pass-through scenarios
+        HashSet<(Node2D, Node2D, int)> passThroughChecks = new HashSet<(Node2D, Node2D, int)>();
+
+        List<Node2D> collisionNodes = new List<Node2D>();
+
+        foreach (var pathEntry in paths)
+        {
+            Transform seeker = pathEntry.Key;
+            List<Node2D> path = pathEntry.Value;
+
+            for (int i = 0; i < path.Count; i++)
+            {
+                Node2D currentNode = path[i];
+                int arrivalTime = i; // Time step corresponds to the index in the path
+
+                // Record arrival times
+                if (!nodeArrivalTimes.ContainsKey(currentNode))
+                {
+                    nodeArrivalTimes[currentNode] = new Dictionary<int, int>();
+                }
+
+                if (!nodeArrivalTimes[currentNode].ContainsKey(arrivalTime))
+                {
+                    nodeArrivalTimes[currentNode][arrivalTime] = 0;
+                }
+
+                nodeArrivalTimes[currentNode][arrivalTime]++;
+
+                // If multiple agents arrive at the same node at the same time
+                if (nodeArrivalTimes[currentNode][arrivalTime] > 1 && !collisionNodes.Contains(currentNode))
+                {
+                    collisionNodes.Add(currentNode);
+                }
+
+                // Check for pass-through collisions
+                if (i > 0)
+                {
+                    Node2D previousNode = path[i - 1];
+                    var passThroughKey = (currentNode, previousNode, arrivalTime);
+
+                    // Check if another agent is moving in the opposite direction at the same time
+                    foreach (var otherEntry in paths)
+                    {
+                        if (otherEntry.Key == seeker) continue; // Skip the same agent
+
+                        List<Node2D> otherPath = otherEntry.Value;
+                        if (arrivalTime > 0 && arrivalTime < otherPath.Count)
+                        {
+                            Node2D otherCurrent = otherPath[arrivalTime];
+                            Node2D otherPrevious = otherPath[arrivalTime - 1];
+
+                            if (otherCurrent == previousNode && otherPrevious == currentNode)
+                            {
+                                passThroughChecks.Add(passThroughKey);
+                                collisionNodes.Add(currentNode); // Add the node as a collision
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return collisionNodes;
+    }
+
     void OnDrawGizmos()
     {
         Gizmos.DrawWireCube(transform.position, new Vector3(gridWorldSize.x, gridWorldSize.y, 1));
 
         if (Grid != null)
         {
+            List<Node2D> collisionNodes = DetectCollisions();
+
             foreach (Node2D n in Grid)
             {
                 if (n.obstacle)
@@ -98,12 +165,20 @@ public class Grid2D : MonoBehaviour
                 else
                     Gizmos.color = Color.white;
 
-                // Highlight nodes in paths
-                foreach (var path in paths.Values)
+                // Highlight collision nodes in yellow
+                if (collisionNodes.Contains(n))
                 {
-                    if (path.Contains(n))
+                    Gizmos.color = Color.yellow;
+                }
+                else
+                {
+                    // Highlight nodes in paths
+                    foreach (var path in paths.Values)
                     {
-                        Gizmos.color = Color.black;
+                        if (path.Contains(n))
+                        {
+                            Gizmos.color = Color.black;
+                        }
                     }
                 }
 

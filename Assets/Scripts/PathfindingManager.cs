@@ -4,7 +4,7 @@ public class PathfindingManager : MonoBehaviour
 {
     void Update()
     {
-        // Trigger pathfinding for all agents when Spacebar is pressed
+        // Trigger pathfinding for all agents when the Spacebar is pressed
         if (Input.GetKeyDown(KeyCode.Space))
         {
             TriggerPathfindingForAll();
