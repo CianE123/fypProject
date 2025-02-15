@@ -64,10 +64,15 @@ public class Grid2D : MonoBehaviour
 
     public Node2D NodeFromWorldPoint(Vector3 worldPosition)
     {
-        int x = Mathf.RoundToInt(worldPosition.x - 1 + (gridSizeX / 2));
-        int y = Mathf.RoundToInt(worldPosition.y + (gridSizeY / 2));
+        float percentX = (worldPosition.x - worldBottomLeft.x) / gridWorldSize.x;
+        float percentY = (worldPosition.y - worldBottomLeft.y) / gridWorldSize.y;
+        percentX = Mathf.Clamp01(percentX);
+        percentY = Mathf.Clamp01(percentY);
+        int x = Mathf.RoundToInt((gridSizeX - 1) * percentX);
+        int y = Mathf.RoundToInt((gridSizeY - 1) * percentY);
         return Grid[x, y];
     }
+
 
     public void SetPath(Transform seeker, List<Node2D> path)
     {
