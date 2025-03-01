@@ -82,7 +82,8 @@ public class Pathfinding2D : MonoBehaviour
         path.Reverse();
 
         // Store the path in the Grid2D manager for this seeker
-        grid.SetPath(transform, path);
+        grid.SetStandardPath(transform, path);
+        grid.currentSolutionType = Grid2D.PathSolutionType.Standard;
     }
 
     private int GetDistance(Node2D nodeA, Node2D nodeB)

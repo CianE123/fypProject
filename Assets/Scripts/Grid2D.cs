@@ -9,11 +9,22 @@ public class Grid2D : MonoBehaviour
     public Node2D[,] Grid;
     public Tilemap obstaclemap;
 
+    // Dictionaries for the two solution types.
     public Dictionary<Transform, List<Node2D>> paths = new Dictionary<Transform, List<Node2D>>();
+    public Dictionary<Transform, List<Node2D>> collisionFreePaths = new Dictionary<Transform, List<Node2D>>();
+
+    // Enum to choose which solution to display.
+    public enum PathSolutionType { Standard, CollisionFree }
+    public PathSolutionType currentSolutionType = PathSolutionType.Standard;
 
     Vector3 worldBottomLeft;
     float nodeDiameter;
     int gridSizeX, gridSizeY;
+
+    // Dictionary to store a random color for each agent.
+    private Dictionary<Transform, Color> agentColors = new Dictionary<Transform, Color>();
+    // Dictionary to store a random offset for each agent.
+    private Dictionary<Transform, Vector3> agentOffsets = new Dictionary<Transform, Vector3>();
 
     void Awake()
     {
@@ -73,67 +84,58 @@ public class Grid2D : MonoBehaviour
         return Grid[x, y];
     }
 
-
-    public void SetPath(Transform seeker, List<Node2D> path)
+    // Methods to set the respective paths.
+    public void SetStandardPath(Transform seeker, List<Node2D> path)
     {
         if (paths.ContainsKey(seeker))
-        {
             paths[seeker] = path;
-        }
         else
-        {
             paths.Add(seeker, path);
-        }
     }
 
-    private List<Node2D> DetectCollisions()
+    public void SetCollisionFreePath(Transform seeker, List<Node2D> path)
     {
-        // Tracks arrival times for each node
-        Dictionary<Node2D, Dictionary<int, int>> nodeArrivalTimes = new Dictionary<Node2D, Dictionary<int, int>>();
-        // Tracks pass-through scenarios
-        HashSet<(Node2D, Node2D, int)> passThroughChecks = new HashSet<(Node2D, Node2D, int)>();
+        if (collisionFreePaths.ContainsKey(seeker))
+            collisionFreePaths[seeker] = path;
+        else
+            collisionFreePaths.Add(seeker, path);
+    }
 
+    // Detect collisions only within the active solution.
+    private List<Node2D> DetectCollisions(Dictionary<Transform, List<Node2D>> activePaths)
+    {
+        // Tracks arrival times for each node.
+        Dictionary<Node2D, Dictionary<int, int>> nodeArrivalTimes = new Dictionary<Node2D, Dictionary<int, int>>();
         List<Node2D> collisionNodes = new List<Node2D>();
 
-        foreach (var pathEntry in paths)
+        foreach (var pathEntry in activePaths)
         {
-            Transform seeker = pathEntry.Key;
             List<Node2D> path = pathEntry.Value;
-
             for (int i = 0; i < path.Count; i++)
             {
                 Node2D currentNode = path[i];
-                int arrivalTime = i; // Time step corresponds to the index in the path
+                int arrivalTime = i; // time step corresponds to the index in the path
 
-                // Record arrival times
                 if (!nodeArrivalTimes.ContainsKey(currentNode))
-                {
                     nodeArrivalTimes[currentNode] = new Dictionary<int, int>();
-                }
 
                 if (!nodeArrivalTimes[currentNode].ContainsKey(arrivalTime))
-                {
                     nodeArrivalTimes[currentNode][arrivalTime] = 0;
-                }
 
                 nodeArrivalTimes[currentNode][arrivalTime]++;
 
-                // If multiple agents arrive at the same node at the same time
+                // Mark collision if more than one agent arrives at the same node at the same time.
                 if (nodeArrivalTimes[currentNode][arrivalTime] > 1 && !collisionNodes.Contains(currentNode))
-                {
                     collisionNodes.Add(currentNode);
-                }
 
-                // Check for pass-through collisions
+                // Check for pass-through (swapping) collisions.
                 if (i > 0)
                 {
                     Node2D previousNode = path[i - 1];
-                    var passThroughKey = (currentNode, previousNode, arrivalTime);
-
-                    // Check if another agent is moving in the opposite direction at the same time
-                    foreach (var otherEntry in paths)
+                    foreach (var otherEntry in activePaths)
                     {
-                        if (otherEntry.Key == seeker) continue; // Skip the same agent
+                        if (otherEntry.Value == path)
+                            continue; // Skip self
 
                         List<Node2D> otherPath = otherEntry.Value;
                         if (arrivalTime > 0 && arrivalTime < otherPath.Count)
@@ -141,18 +143,36 @@ public class Grid2D : MonoBehaviour
                             Node2D otherCurrent = otherPath[arrivalTime];
                             Node2D otherPrevious = otherPath[arrivalTime - 1];
 
-                            if (otherCurrent == previousNode && otherPrevious == currentNode)
-                            {
-                                passThroughChecks.Add(passThroughKey);
-                                collisionNodes.Add(currentNode); // Add the node as a collision
-                            }
+                            if (otherCurrent == previousNode && otherPrevious == currentNode && !collisionNodes.Contains(currentNode))
+                                collisionNodes.Add(currentNode);
                         }
                     }
                 }
             }
         }
-
         return collisionNodes;
+    }
+
+    // Returns a random color for the agent; stores it for consistent display.
+    private Color GetRandomColorForAgent(Transform agent)
+    {
+        if (!agentColors.ContainsKey(agent))
+        {
+            agentColors[agent] = Random.ColorHSV();
+        }
+        return agentColors[agent];
+    }
+
+    // Returns a random offset for the agent (in the XY plane) to offset its path drawing.
+    private Vector3 GetRandomOffsetForAgent(Transform agent)
+    {
+        if (!agentOffsets.ContainsKey(agent))
+        {
+            // A small random offset (adjust the magnitude as needed)
+            Vector2 offset2D = Random.insideUnitCircle * (nodeRadius * 0.3f);
+            agentOffsets[agent] = new Vector3(offset2D.x, offset2D.y, 0);
+        }
+        return agentOffsets[agent];
     }
 
     void OnDrawGizmos()
@@ -161,33 +181,51 @@ public class Grid2D : MonoBehaviour
 
         if (Grid != null)
         {
-            List<Node2D> collisionNodes = DetectCollisions();
+            // Choose active paths based on the current solution type.
+            Dictionary<Transform, List<Node2D>> activePaths = (currentSolutionType == PathSolutionType.Standard) ? paths : collisionFreePaths;
+            List<Node2D> collisionNodes = DetectCollisions(activePaths);
 
             foreach (Node2D n in Grid)
             {
-                if (n.obstacle)
-                    Gizmos.color = Color.red;
-                else
-                    Gizmos.color = Color.white;
+                // Default color based on obstacle state.
+                Gizmos.color = n.obstacle ? Color.red : Color.white;
 
-                // Highlight collision nodes in yellow
+                // If this node is part of a collision, highlight it.
                 if (collisionNodes.Contains(n))
                 {
                     Gizmos.color = Color.yellow;
                 }
                 else
                 {
-                    // Highlight nodes in paths
-                    foreach (var path in paths.Values)
+                    // If the node belongs to any path in the active solution, use a designated color.
+                    foreach (var path in activePaths.Values)
                     {
                         if (path.Contains(n))
-                        {
+                        {   
                             Gizmos.color = Color.black;
+                            break;
                         }
                     }
                 }
 
                 Gizmos.DrawCube(n.worldPosition, Vector3.one * (nodeRadius));
+            }
+
+            // Draw colored lines for each agent's path with an offset.
+            foreach (var kvp in activePaths)
+            {
+                List<Node2D> path = kvp.Value;
+                if (path.Count > 1)
+                {
+                    Gizmos.color = GetRandomColorForAgent(kvp.Key);
+                    Vector3 offset = GetRandomOffsetForAgent(kvp.Key);
+                    for (int i = 0; i < path.Count - 1; i++)
+                    {
+                        Vector3 startPos = path[i].worldPosition + offset;
+                        Vector3 endPos = path[i + 1].worldPosition + offset;
+                        Gizmos.DrawLine(startPos, endPos);
+                    }
+                }
             }
         }
     }
