@@ -8,13 +8,17 @@ public class Pathfinding2D : MonoBehaviour
     private Grid2D grid;
     private Node2D seekerNode, targetNode;
     public GameObject GridOwner;
+    
+    //Penalty increment 
+    private int penaltyIncrement = 10; 
 
     void Start()
     {
         grid = GridOwner.GetComponent<Grid2D>();
     }
 
-    public void FindPath()
+    // New signature with a usePenalty parameter
+    public void FindPath(bool usePenalty)
     {
         if (target == null)
         {
@@ -25,6 +29,10 @@ public class Pathfinding2D : MonoBehaviour
         // Get the seeker and target positions in grid coordinates
         seekerNode = grid.NodeFromWorldPoint(transform.position);
         targetNode = grid.NodeFromWorldPoint(target.position);
+
+        // Initialize starting cost
+        seekerNode.gCost = 0;
+        seekerNode.hCost = GetDistance(seekerNode, targetNode);
 
         List<Node2D> openSet = new List<Node2D>();
         HashSet<Node2D> closedSet = new HashSet<Node2D>();
@@ -46,7 +54,7 @@ public class Pathfinding2D : MonoBehaviour
 
             if (node == targetNode)
             {
-                RetracePath(seekerNode, targetNode);
+                RetracePath(seekerNode, targetNode, usePenalty);
                 return;
             }
 
@@ -55,7 +63,12 @@ public class Pathfinding2D : MonoBehaviour
                 if (neighbour.obstacle || closedSet.Contains(neighbour))
                     continue;
 
-                int newCostToNeighbour = node.gCost + GetDistance(node, neighbour);
+                // Base movement cost
+                int baseCost = GetDistance(node, neighbour);
+                // Add penalty if using penalty mode
+                int additionalPenalty = (usePenalty) ? grid.GetPenalty(neighbour) : 0;
+                int newCostToNeighbour = node.gCost + baseCost + additionalPenalty;
+
                 if (newCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
                 {
                     neighbour.gCost = newCostToNeighbour;
@@ -69,7 +82,7 @@ public class Pathfinding2D : MonoBehaviour
         }
     }
 
-    void RetracePath(Node2D startNode, Node2D endNode)
+    void RetracePath(Node2D startNode, Node2D endNode, bool usePenalty)
     {
         List<Node2D> path = new List<Node2D>();
         Node2D currentNode = endNode;
@@ -81,7 +94,13 @@ public class Pathfinding2D : MonoBehaviour
         }
         path.Reverse();
 
-        // Store the path in the Grid2D manager for this seeker
+        // Update the penalty grid along the path if using penalty 
+        if (usePenalty)
+        {
+            grid.AddPenaltyForPath(path, penaltyIncrement);
+        }
+
+        // Store the path in the Grid2D manager for this seeker.
         grid.SetStandardPath(transform, path);
         grid.currentSolutionType = Grid2D.PathSolutionType.Standard;
     }
@@ -90,7 +109,6 @@ public class Pathfinding2D : MonoBehaviour
     {
         int dstX = Mathf.Abs(nodeA.GridX - nodeB.GridX);
         int dstY = Mathf.Abs(nodeA.GridY - nodeB.GridY);
-
         return (dstX > dstY) ? 14 * dstY + 10 * (dstX - dstY) : 14 * dstX + 10 * (dstY - dstX);
     }
 }

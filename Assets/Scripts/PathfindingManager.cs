@@ -2,6 +2,9 @@ using UnityEngine;
 
 public class PathfindingManager : MonoBehaviour
 {
+    // Toggle for penalty usage
+    public bool usePenalty = false;
+
     void Update()
     {
         // Trigger pathfinding for all agents when the Spacebar is pressed
@@ -13,14 +16,20 @@ public class PathfindingManager : MonoBehaviour
 
     void TriggerPathfindingForAll()
     {
-        // Find all objects with the Pathfinding2D component
-        Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
+        // Reset the penalty grid before starting
+        Grid2D grid = FindObjectOfType<Grid2D>();
+        if (grid != null)
+        {
+            grid.ResetPenaltyGrid();
+        }
 
+        // Process all agents sequentially
+        Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
         foreach (Pathfinding2D pathfinder in pathfinders)
         {
             if (pathfinder != null)
-            {   
-                pathfinder.FindPath(); 
+            {
+                pathfinder.FindPath(usePenalty);
             }
         }
     }

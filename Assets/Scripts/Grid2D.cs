@@ -8,6 +8,7 @@ public class Grid2D : MonoBehaviour
     public float nodeRadius;
     public Node2D[,] Grid;
     public Tilemap obstaclemap;
+    public int[,] penaltyGrid;
 
     // Dictionaries for the two solution types.
     public Dictionary<Transform, List<Node2D>> paths = new Dictionary<Transform, List<Node2D>>();
@@ -37,19 +38,48 @@ public class Grid2D : MonoBehaviour
     void CreateGrid()
     {
         Grid = new Node2D[gridSizeX, gridSizeY];
+        penaltyGrid = new int[gridSizeX, gridSizeY];  // initialize penalty grid
         worldBottomLeft = transform.position - Vector3.right * gridWorldSize.x / 2 - Vector3.up * gridWorldSize.y / 2;
 
         for (int x = 0; x < gridSizeX; x++)
         {
             for (int y = 0; y < gridSizeY; y++)
             {
-                Vector3 worldPoint = worldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) + Vector3.up * (y * nodeDiameter + nodeRadius);
+                Vector3 worldPoint = worldBottomLeft + Vector3.right * (x * nodeDiameter + nodeRadius) 
+                                                  + Vector3.up * (y * nodeDiameter + nodeRadius);
                 Grid[x, y] = new Node2D(false, worldPoint, x, y);
+                penaltyGrid[x, y] = 0; // start with no penalty
 
                 if (obstaclemap.HasTile(obstaclemap.WorldToCell(Grid[x, y].worldPosition)))
                     Grid[x, y].SetObstacle(true);
                 else
                     Grid[x, y].SetObstacle(false);
+            }
+        }
+    }
+
+    //Get the current penalty for a node
+    public int GetPenalty(Node2D node)
+    {
+        return penaltyGrid[node.GridX, node.GridY];
+    }
+
+    //Add a penalty value to each node along a path
+    public void AddPenaltyForPath(List<Node2D> path, int penaltyValue)
+    {
+        foreach (Node2D node in path)
+        {
+            penaltyGrid[node.GridX, node.GridY] += penaltyValue;
+        }
+    }
+
+    public void ResetPenaltyGrid()
+    {
+        for (int x = 0; x < penaltyGrid.GetLength(0); x++)
+        {
+            for (int y = 0; y < penaltyGrid.GetLength(1); y++)
+            {
+                penaltyGrid[x, y] = 0;
             }
         }
     }
