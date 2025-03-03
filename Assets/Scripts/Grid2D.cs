@@ -65,11 +65,33 @@ public class Grid2D : MonoBehaviour
     }
 
     //Add a penalty value to each node along a path
-    public void AddPenaltyForPath(List<Node2D> path, int penaltyValue)
+    public void AddPenaltyForPath(List<Node2D> path, int penaltyValue, bool expandPenalty, int neighborPenalty)
     {
         foreach (Node2D node in path)
         {
+            // Apply penalty to the path cells 
             penaltyGrid[node.GridX, node.GridY] += penaltyValue;
+            //Expands the penalty to neighboring cells
+            if (expandPenalty)
+            {
+                // Loop over all adjacent offsets (including diagonals)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        // Skip the cell itself.
+                        if (dx == 0 && dy == 0)
+                            continue;
+                        int nx = node.GridX + dx;
+                        int ny = node.GridY + dy;
+                        // Check bounds using the grid dimensions.
+                        if (nx >= 0 && nx < gridSizeX && ny >= 0 && ny < gridSizeY)
+                        {
+                            penaltyGrid[nx, ny] += neighborPenalty;
+                        }
+                    }
+                }
+            }
         }
     }
 

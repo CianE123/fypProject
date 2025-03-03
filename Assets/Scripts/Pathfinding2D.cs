@@ -8,9 +8,6 @@ public class Pathfinding2D : MonoBehaviour
     private Grid2D grid;
     private Node2D seekerNode, targetNode;
     public GameObject GridOwner;
-    
-    //Penalty increment 
-    private int penaltyIncrement = 10; 
 
     void Start()
     {
@@ -18,7 +15,7 @@ public class Pathfinding2D : MonoBehaviour
     }
 
     // New signature with a usePenalty parameter
-    public void FindPath(bool usePenalty)
+    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement)
     {
         if (target == null)
         {
@@ -54,7 +51,7 @@ public class Pathfinding2D : MonoBehaviour
 
             if (node == targetNode)
             {
-                RetracePath(seekerNode, targetNode, usePenalty);
+                RetracePath(seekerNode, targetNode, usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
                 return;
             }
 
@@ -82,7 +79,7 @@ public class Pathfinding2D : MonoBehaviour
         }
     }
 
-    void RetracePath(Node2D startNode, Node2D endNode, bool usePenalty)
+    void RetracePath(Node2D startNode, Node2D endNode, bool usePenalty, int penaltyIncrement,  bool expandPenalty, int neighborPenaltyIncrement)
     {
         List<Node2D> path = new List<Node2D>();
         Node2D currentNode = endNode;
@@ -97,9 +94,8 @@ public class Pathfinding2D : MonoBehaviour
         // Update the penalty grid along the path if using penalty 
         if (usePenalty)
         {
-            grid.AddPenaltyForPath(path, penaltyIncrement);
+            grid.AddPenaltyForPath(path, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
         }
-
         // Store the path in the Grid2D manager for this seeker.
         grid.SetStandardPath(transform, path);
         grid.currentSolutionType = Grid2D.PathSolutionType.Standard;

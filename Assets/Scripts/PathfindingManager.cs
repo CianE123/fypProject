@@ -4,6 +4,12 @@ public class PathfindingManager : MonoBehaviour
 {
     // Toggle for penalty usage
     public bool usePenalty = false;
+    //Penalty increment 
+    public int penaltyIncrement = 10; 
+    // Toggle for neighbor penalty usage
+    public bool expandPenalty = false;
+    //Neighbor penalty increment 
+    public int neighborPenaltyIncrement = 3;
 
     void Update()
     {
@@ -29,7 +35,7 @@ public class PathfindingManager : MonoBehaviour
         {
             if (pathfinder != null)
             {
-                pathfinder.FindPath(usePenalty);
+                pathfinder.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
             }
         }
     }
