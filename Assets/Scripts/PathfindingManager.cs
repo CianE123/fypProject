@@ -4,12 +4,14 @@ public class PathfindingManager : MonoBehaviour
 {
     // Toggle for penalty usage
     public bool usePenalty = false;
-    //Penalty increment 
+    // Penalty increment 
     public int penaltyIncrement = 10; 
     // Toggle for neighbor penalty usage
     public bool expandPenalty = false;
-    //Neighbor penalty increment 
+    // Neighbor penalty increment 
     public int neighborPenaltyIncrement = 3;
+    // Toggle for collision-free pathfinding
+    public bool collisionFree = false;
 
     void Update()
     {
@@ -27,15 +29,31 @@ public class PathfindingManager : MonoBehaviour
         if (grid != null)
         {
             grid.ResetPenaltyGrid();
+            CollisionFreePathfinding2D.ResetReservationTable();
         }
 
-        // Process all agents sequentially
-        Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
-        foreach (Pathfinding2D pathfinder in pathfinders)
+        if (!collisionFree)
         {
-            if (pathfinder != null)
+            // Process standard pathfinding agents
+            Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
+            foreach (Pathfinding2D pathfinder in pathfinders)
             {
-                pathfinder.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+                if (pathfinder != null)
+                {
+                    pathfinder.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+                }
+            }
+        }
+        else
+        {
+            // Process collision-free pathfinding agents
+            CollisionFreePathfinding2D[] collisionAgents = FindObjectsOfType<CollisionFreePathfinding2D>();
+            foreach (CollisionFreePathfinding2D agent in collisionAgents)
+            {
+                if (agent != null)
+                {
+                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+                }
             }
         }
     }

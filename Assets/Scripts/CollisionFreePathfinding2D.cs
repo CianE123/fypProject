@@ -3,20 +3,24 @@ using UnityEngine;
 
 public class CollisionFreePathfinding2D : MonoBehaviour
 {
-    public Transform target; // Target for this agent
-    public GameObject GridOwner; // Reference to the Grid2D object
+    public Transform target;          // Target for this agent.
+    public GameObject GridOwner;        // Reference to the Grid2D object.
+    public int maxLowLevelExpansions = 10000;  // Safety limit on A* expansions.
 
     private Grid2D grid;
 
-    // Helper class for spatiotemporal nodes.
+    // A shared reservation table to record planned paths.
+    private static ReservationTable reservationTable = new ReservationTable();
+
+    // Temporal node holds spatiotemporal information for A*.
     private class TemporalNode
     {
-        public Node2D node;  // Spatial node reference
-        public int time;     // Time step when the node is reached
-        public int gCost;    // Cost from start to this node
-        public int hCost;    // Heuristic cost from this node to target
-        public int fCost { get { return gCost + hCost; } } // Total cost
-        public TemporalNode parent; // Reference to previous node for path retracing
+        public Node2D node;
+        public int time;
+        public int gCost;
+        public int hCost;
+        public int fCost { get { return gCost + hCost; } }
+        public TemporalNode parent;
 
         public TemporalNode(Node2D node, int time)
         {
@@ -25,13 +29,74 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         }
     }
 
+    // The reservation table stores vertex and edge reservations by time step.
+    private class ReservationTable
+    {
+        // For each time, store reserved nodes (with a flag marking if it’s the goal).
+        private Dictionary<int, List<(Node2D, bool)>> vertexReservations = new Dictionary<int, List<(Node2D, bool)>>();
+        // For each time, store reserved edges (from, to).
+        private Dictionary<int, List<(Node2D, Node2D)>> edgeReservations = new Dictionary<int, List<(Node2D, Node2D)>>();
+
+        public bool IsVertexReserved(Node2D node, int time)
+        {
+            if (vertexReservations.ContainsKey(time))
+            {
+                foreach (var res in vertexReservations[time])
+                {
+                    if (res.Item1 == node)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        public bool IsEdgeReserved(Node2D from, Node2D to, int time)
+        {
+            if (edgeReservations.ContainsKey(time))
+            {
+                foreach (var edge in edgeReservations[time])
+                {
+                    // A reserved edge from 'from' to 'to' means a move in the opposite direction (swapping)
+                    // would conflict.
+                    if (edge.Item1 == to && edge.Item2 == from)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        public void ReservePath(List<Node2D> path)
+        {
+            // Reserve each vertex along the path.
+            for (int t = 0; t < path.Count; t++)
+            {
+                Node2D node = path[t];
+                if (!vertexReservations.ContainsKey(t))
+                    vertexReservations[t] = new List<(Node2D, bool)>();
+                // Mark the final cell as a goal reservation.
+                bool isGoal = (t == path.Count - 1);
+                vertexReservations[t].Add((node, isGoal));
+            }
+            // Reserve the edges (for pass–through collision checks).
+            for (int t = 1; t < path.Count; t++)
+            {
+                Node2D from = path[t - 1];
+                Node2D to = path[t];
+                if (!edgeReservations.ContainsKey(t))
+                    edgeReservations[t] = new List<(Node2D, Node2D)>();
+                edgeReservations[t].Add((from, to));
+            }
+        }
+    }
+
     void Start()
     {
         grid = GridOwner.GetComponent<Grid2D>();
     }
 
-    /// Main entry point for finding a collision-free path using a spatiotemporal A* search.
-    public void FindCollisionFreePath()
+    // Finds a collision–free path using a spatiotemporal A* that checks a shared reservation table.
+    // Penalties (if enabled) are added along the found path.
+    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement)
     {
         if (target == null)
         {
@@ -40,106 +105,114 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         }
 
         Node2D startNode = grid.NodeFromWorldPoint(transform.position);
-        Node2D targetNode = grid.NodeFromWorldPoint(target.position);
+        Node2D goalNode = grid.NodeFromWorldPoint(target.position);
 
-        // Initialize the open list and closed set
         List<TemporalNode> openList = new List<TemporalNode>();
         HashSet<(Node2D, int)> closedSet = new HashSet<(Node2D, int)>();
 
-        TemporalNode startTemporal = new TemporalNode(startNode, 0);
+        TemporalNode startTemporal = new TemporalNode(startNode, 0)
+        {
+            gCost = 0,
+            hCost = GetDistance(startNode, goalNode)
+        };
         openList.Add(startTemporal);
 
-        TemporalNode endTemporal = RunSearch(openList, closedSet, targetNode);
+        TemporalNode endTemporal = null;
+        int expansions = 0;
 
+        // Main A* search loop.
+        while (openList.Count > 0)
+        {
+            expansions++;
+            if (expansions > maxLowLevelExpansions)
+            {
+                Debug.LogWarning($"{gameObject.name}: Low-level search exceeded expansion limit.");
+                break;
+            }
+
+            // Get the node with the lowest fCost.
+            openList.Sort((a, b) => a.fCost.CompareTo(b.fCost));
+            TemporalNode current = openList[0];
+            openList.RemoveAt(0);
+            closedSet.Add((current.node, current.time));
+
+            // If we've reached the goal, finish.
+            if (current.node == goalNode)
+            {
+                endTemporal = current;
+                break;
+            }
+
+            // Expand neighbors.
+            foreach (Node2D neighbor in grid.GetNeighbors(current.node))
+            {
+                if (neighbor.obstacle)
+                    continue;
+
+                int nextTime = current.time + 1;
+
+                // Check reservations for vertex and edge conflicts.
+                if (reservationTable.IsVertexReserved(neighbor, nextTime) ||
+                    reservationTable.IsEdgeReserved(current.node, neighbor, nextTime))
+                    continue;
+
+                int additionalPenalty = usePenalty ? grid.GetPenalty(neighbor) : 0;
+                int newCost = current.gCost + GetDistance(current.node, neighbor) + additionalPenalty;
+
+                TemporalNode neighborTemporal = new TemporalNode(neighbor, nextTime)
+                {
+                    gCost = newCost,
+                    hCost = GetDistance(neighbor, goalNode),
+                    parent = current
+                };
+
+                if (closedSet.Contains((neighbor, nextTime)))
+                    continue;
+
+                bool skip = false;
+                foreach (TemporalNode openNode in openList)
+                {
+                    if (openNode.node == neighbor && openNode.time == nextTime && openNode.gCost <= newCost)
+                    {
+                        skip = true;
+                        break;
+                    }
+                }
+                if (!skip)
+                    openList.Add(neighborTemporal);
+            }
+        }
+
+        // If a path was found, retrace it, apply penalties, reserve it, and store it for drawing.
         if (endTemporal != null)
         {
             List<Node2D> path = RetracePath(startTemporal, endTemporal);
-            grid.SetCollisionFreePath(transform, path);
+            if (usePenalty)
+            {
+                grid.AddPenaltyForPath(path, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+            }
+            reservationTable.ReservePath(path);
+
+            // For drawing, remove the starting node to match Pathfinding2D.
+            List<Node2D> displayPath = new List<Node2D>(path);
+            if (displayPath.Count > 0)
+                displayPath.RemoveAt(0);
+            grid.SetCollisionFreePath(transform, displayPath);
+            grid.currentSolutionType = Grid2D.PathSolutionType.CollisionFree;
         }
         else
         {
-            Debug.LogWarning($"{gameObject.name} could not find a collision-free path.");
+            Debug.LogWarning($"{gameObject.name} could not find a collision–free path.");
         }
     }
 
-    // Runs the main A* search loop using spatiotemporal nodes.
-    private TemporalNode RunSearch(List<TemporalNode> openList, HashSet<(Node2D, int)> closedSet, Node2D targetNode)
-    {
-        while (openList.Count > 0)
-        {
-            // Retrieve and remove the node with the lowest fCost
-            TemporalNode current = GetLowestCostNode(openList);
-            openList.Remove(current);
-            closedSet.Add((current.node, current.time));
-
-            // If we have reached the target node, return the current temporal node
-            if (current.node == targetNode)
-                return current;
-
-            // Expand current node's neighbors.]
-            ExpandNeighbors(current, openList, closedSet, targetNode);
-        }
-        return null;
-    }
-
-    // Retrieves the node with the lowest fCost from the list
-    private TemporalNode GetLowestCostNode(List<TemporalNode> openList)
-    {
-        TemporalNode lowest = openList[0];
-        foreach (TemporalNode node in openList)
-        {
-            if (node.fCost < lowest.fCost || (node.fCost == lowest.fCost && node.hCost < lowest.hCost))
-                lowest = node;
-        }
-        return lowest;
-    }
-
-    // Expands all valid neighbors of the current node and adds them to the open list
-    private void ExpandNeighbors(TemporalNode current, List<TemporalNode> openList, HashSet<(Node2D, int)> closedSet, Node2D targetNode)
-    {
-        foreach (Node2D neighbor in grid.GetNeighbors(current.node))
-        {
-            if (neighbor.obstacle)
-                continue;
-
-            int nextTime = current.time + 1;
-
-            // Skip if the neighbor is reserved or causes a pass-through collision
-            if (IsReserved(neighbor, nextTime) || IsPassThroughCollision(current.node, neighbor, current.time, nextTime))
-                continue;
-
-            int newCost = current.gCost + GetDistance(current.node, neighbor);
-            TemporalNode neighborTemporal = new TemporalNode(neighbor, nextTime)
-            {
-                gCost = newCost,
-                hCost = GetDistance(neighbor, targetNode),
-                parent = current
-            };
-
-            if (closedSet.Contains((neighbor, nextTime)))
-                continue;
-
-            // If a similar node is already in the open list with a lower cost, skip adding this one
-            bool skip = false;
-            foreach (TemporalNode openNode in openList)
-            {
-                if (openNode.node == neighbor && openNode.time == nextTime && openNode.gCost <= newCost)
-                {
-                    skip = true;
-                    break;
-                }
-            }
-            if (!skip)
-                openList.Add(neighborTemporal);
-        }
-    }
-
-    // Retraces the path from the end node back to the start node
+    // Retraces the path from end to start.
     private List<Node2D> RetracePath(TemporalNode start, TemporalNode end)
     {
         List<Node2D> path = new List<Node2D>();
         TemporalNode current = end;
-        while (current != null && current != start)
+        
+        while (current != null)
         {
             path.Add(current.node);
             current = current.parent;
@@ -148,39 +221,17 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         return path;
     }
 
-    // Returns the movement cost between two nodes
-    private int GetDistance(Node2D nodeA, Node2D nodeB)
+    // Manhattan-like heuristic.
+    private int GetDistance(Node2D a, Node2D b)
     {
-        int dstX = Mathf.Abs(nodeA.GridX - nodeB.GridX);
-        int dstY = Mathf.Abs(nodeA.GridY - nodeB.GridY);
+        int dstX = Mathf.Abs(a.GridX - b.GridX);
+        int dstY = Mathf.Abs(a.GridY - b.GridY);
         return (dstX > dstY) ? 14 * dstY + 10 * (dstX - dstY) : 14 * dstX + 10 * (dstY - dstX);
     }
 
-    // Checks if any collision-free path reserves the given node at a specific time
-    private bool IsReserved(Node2D node, int time)
+    public static void ResetReservationTable()
     {
-        foreach (var kvp in grid.collisionFreePaths)
-        {
-            List<Node2D> path = kvp.Value;
-            if (time < path.Count && path[time] == node)
-                return true;
-        }
-        return false;
+        reservationTable = new ReservationTable();
     }
 
-
-    // Checks for pass-through collisions where two agents might swap positions
-    private bool IsPassThroughCollision(Node2D current, Node2D neighbor, int currentTime, int nextTime)
-    {
-        foreach (var kvp in grid.collisionFreePaths)
-        {
-            List<Node2D> path = kvp.Value;
-            if (currentTime > 0 && nextTime < path.Count)
-            {
-                if (path[currentTime] == neighbor && path[nextTime] == current)
-                    return true;
-            }
-        }
-        return false;
-    }
 }
