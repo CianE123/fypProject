@@ -1177,6 +1177,7 @@ GameObject:
   - component: {fileID: 177924306}
   - component: {fileID: 177924309}
   - component: {fileID: 177924310}
+  - component: {fileID: 177924311}
   m_Layer: 0
   m_Name: StartPoint (1)
   m_TagString: Agent
@@ -1292,6 +1293,20 @@ MonoBehaviour:
   target: {fileID: 1295510191}
   GridOwner: {fileID: 385043498}
   maxLowLevelExpansions: 10000
+--- !u!114 &177924311
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 177924305}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aba73f061a42e4a468564c34e5f87064, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  speed: 3
+  shouldMove: 0
 --- !u!1 &385043498
 GameObject:
   m_ObjectHideFlags: 0
@@ -1591,6 +1606,7 @@ GameObject:
   - component: {fileID: 1335228423}
   - component: {fileID: 1335228426}
   - component: {fileID: 1335228427}
+  - component: {fileID: 1335228428}
   m_Layer: 0
   m_Name: StartPoint (2)
   m_TagString: Agent
@@ -1706,6 +1722,20 @@ MonoBehaviour:
   target: {fileID: 58489151}
   GridOwner: {fileID: 385043498}
   maxLowLevelExpansions: 10000
+--- !u!114 &1335228428
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1335228422}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aba73f061a42e4a468564c34e5f87064, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  speed: 3
+  shouldMove: 0
 --- !u!1 &1382400191
 GameObject:
   m_ObjectHideFlags: 0
@@ -1719,6 +1749,7 @@ GameObject:
   - component: {fileID: 1382400192}
   - component: {fileID: 1382400195}
   - component: {fileID: 1382400196}
+  - component: {fileID: 1382400197}
   m_Layer: 0
   m_Name: StartPoint
   m_TagString: Agent
@@ -1834,6 +1865,20 @@ MonoBehaviour:
   target: {fileID: 58489151}
   GridOwner: {fileID: 385043498}
   maxLowLevelExpansions: 10000
+--- !u!114 &1382400197
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1382400191}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aba73f061a42e4a468564c34e5f87064, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  speed: 3
+  shouldMove: 0
 --- !u!1 &1408370285
 GameObject:
   m_ObjectHideFlags: 0
@@ -1847,6 +1892,7 @@ GameObject:
   - component: {fileID: 1408370288}
   - component: {fileID: 1408370287}
   - component: {fileID: 1408370286}
+  - component: {fileID: 1408370291}
   m_Layer: 0
   m_Name: StartPoint (3)
   m_TagString: Agent
@@ -1962,6 +2008,20 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1408370291
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1408370285}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aba73f061a42e4a468564c34e5f87064, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  speed: 3
+  shouldMove: 0
 --- !u!1 &1703346166
 GameObject:
   m_ObjectHideFlags: 0
