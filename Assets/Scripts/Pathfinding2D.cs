@@ -15,7 +15,7 @@ public class Pathfinding2D : MonoBehaviour
     }
 
     // New signature with a usePenalty parameter
-    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement)
+    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement, bool useTemporalPenalty, int maxTemporalDifference)
     {
         if (target == null)
         {
@@ -33,7 +33,10 @@ public class Pathfinding2D : MonoBehaviour
 
         List<Node2D> openSet = new List<Node2D>();
         HashSet<Node2D> closedSet = new HashSet<Node2D>();
+        Dictionary<Node2D, int> nodeStep = new Dictionary<Node2D, int>();
+
         openSet.Add(seekerNode);
+        nodeStep[seekerNode] = 0;
 
         while (openSet.Count > 0)
         {
@@ -55,6 +58,8 @@ public class Pathfinding2D : MonoBehaviour
                 return;
             }
 
+            int currentStep = nodeStep[node];
+
             foreach (Node2D neighbour in grid.GetNeighbors(node))
             {
                 if (neighbour.obstacle || closedSet.Contains(neighbour))
@@ -62,8 +67,18 @@ public class Pathfinding2D : MonoBehaviour
 
                 // Base movement cost
                 int baseCost = GetDistance(node, neighbour);
-                // Add penalty if using penalty mode
-                int additionalPenalty = (usePenalty) ? grid.GetPenalty(neighbour) : 0;
+                int nextStep = currentStep + 1;
+                int additionalPenalty = 0;
+
+                if (usePenalty)
+                {
+                    // If temporal penalty is enabled, use the neighbor's step to check the penalty timing.
+                    if (useTemporalPenalty)
+                        additionalPenalty = grid.GetTemporalPenalty(neighbour, nextStep, maxTemporalDifference);
+                    else
+                        additionalPenalty = grid.GetPenalty(neighbour);
+                }
+
                 int newCostToNeighbour = node.gCost + baseCost + additionalPenalty;
 
                 if (newCostToNeighbour < neighbour.gCost || !openSet.Contains(neighbour))
@@ -73,7 +88,10 @@ public class Pathfinding2D : MonoBehaviour
                     neighbour.parent = node;
 
                     if (!openSet.Contains(neighbour))
+                    {
                         openSet.Add(neighbour);
+                        nodeStep[neighbour] = nextStep;
+                    }
                 }
             }
         }

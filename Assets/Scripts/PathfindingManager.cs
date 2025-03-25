@@ -13,6 +13,10 @@ public class PathfindingManager : MonoBehaviour
     public bool expandPenalty = false;
     // Neighbor penalty increment 
     public int neighborPenaltyIncrement = 3;
+    //Toggle for temporal penalty option
+    public bool useTemporalPenalty = false;
+    // Maximum allowed difference between the recorded penalty time and the current agent step
+    public int maxTemporalDifference = 5;
     // Toggle for collision-free pathfinding
     public bool collisionFree = false;
     // Toggle to reverse the scheduling order (largest distance first if true) 
@@ -74,7 +78,7 @@ public class PathfindingManager : MonoBehaviour
             {
                 if (agent != null)
                 {
-                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement, useTemporalPenalty, maxTemporalDifference);
 
                     // Reset the movement progress (if an AgentMover is attached).
                     AgentMover mover = agent.GetComponent<AgentMover>();
@@ -110,7 +114,7 @@ public class PathfindingManager : MonoBehaviour
             {
                 if (agent != null)
                 {
-                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement, useTemporalPenalty, maxTemporalDifference);
 
                     // Reset the movement progress.
                     AgentMover mover = agent.GetComponent<AgentMover>();
