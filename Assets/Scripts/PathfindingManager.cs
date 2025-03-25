@@ -1,4 +1,7 @@
 using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 
 public class PathfindingManager : MonoBehaviour
 {
@@ -12,6 +15,8 @@ public class PathfindingManager : MonoBehaviour
     public int neighborPenaltyIncrement = 3;
     // Toggle for collision-free pathfinding
     public bool collisionFree = false;
+    // Toggle to reverse the scheduling order (largest distance first if true) 
+    public bool reverseOrder = false;
 
     void Update()
     {
@@ -43,18 +48,36 @@ public class PathfindingManager : MonoBehaviour
             grid.ResetPenaltyGrid();
         }
 
+        // For both standard and collision-free cases, we sort agents based on their distance from target.
         if (!collisionFree)
         {
             // Process standard pathfinding agents.
             Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
-            foreach (Pathfinding2D pathfinder in pathfinders)
-            {
-                if (pathfinder != null)
+
+            // Sort agents based on Manhattan distance from their current position to target.
+            var sortedAgents = reverseOrder ? 
+                pathfinders.OrderByDescending(agent =>
                 {
-                    pathfinder.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
-                    
+                    Node2D startNode = grid.NodeFromWorldPoint(agent.transform.position);
+                    Node2D goalNode = grid.NodeFromWorldPoint(agent.target.position);
+                    return GetManhattanDistance(startNode, goalNode);
+                }).ToArray() :
+                pathfinders.OrderBy(agent =>
+                {
+                    Node2D startNode = grid.NodeFromWorldPoint(agent.transform.position);
+                    Node2D goalNode = grid.NodeFromWorldPoint(agent.target.position);
+                    return GetManhattanDistance(startNode, goalNode);
+                }).ToArray();
+
+            // Process agents in sorted order.
+            foreach (Pathfinding2D agent in sortedAgents)
+            {
+                if (agent != null)
+                {
+                    agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
+
                     // Reset the movement progress (if an AgentMover is attached).
-                    AgentMover mover = pathfinder.GetComponent<AgentMover>();
+                    AgentMover mover = agent.GetComponent<AgentMover>();
                     if (mover != null)
                         mover.ResetPathProgress();
                 }
@@ -62,15 +85,34 @@ public class PathfindingManager : MonoBehaviour
         }
         else
         {
+            // Reset reservations 
+            CollisionFreePathfinding2D.ResetReservationTable(); 
             // Process collision-free pathfinding agents.
             CollisionFreePathfinding2D[] collisionAgents = FindObjectsOfType<CollisionFreePathfinding2D>();
-            foreach (CollisionFreePathfinding2D agent in collisionAgents)
+
+            // Sort collision-free agents based on Manhattan distance.
+            var sortedAgents = reverseOrder ?
+                collisionAgents.OrderByDescending(agent =>
+                {
+                    Node2D startNode = grid.NodeFromWorldPoint(agent.transform.position);
+                    Node2D goalNode = grid.NodeFromWorldPoint(agent.target.position);
+                    return GetManhattanDistance(startNode, goalNode);
+                }).ToArray() :
+                collisionAgents.OrderBy(agent =>
+                {
+                    Node2D startNode = grid.NodeFromWorldPoint(agent.transform.position);
+                    Node2D goalNode = grid.NodeFromWorldPoint(agent.target.position);
+                    return GetManhattanDistance(startNode, goalNode);
+                }).ToArray();
+
+            // Process agents in sorted order.
+            foreach (CollisionFreePathfinding2D agent in sortedAgents)
             {
                 if (agent != null)
                 {
                     agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement);
-                    
-                    // Reset the movement progress 
+
+                    // Reset the movement progress.
                     AgentMover mover = agent.GetComponent<AgentMover>();
                     if (mover != null)
                         mover.ResetPathProgress();
@@ -78,6 +120,15 @@ public class PathfindingManager : MonoBehaviour
             }
         }
     }
+
+    // Helper method for Manhattan distance calculation.
+    private int GetManhattanDistance(Node2D nodeA, Node2D nodeB)
+    {
+        int dstX = Mathf.Abs(nodeA.GridX - nodeB.GridX);
+        int dstY = Mathf.Abs(nodeA.GridY - nodeB.GridY);
+        return (dstX > dstY) ? 14 * dstY + 10 * (dstX - dstY) : 14 * dstX + 10 * (dstY - dstX);
+    }
+
 
     void StartMovementForAll()
     {

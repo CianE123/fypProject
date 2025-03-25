@@ -101,7 +101,7 @@ public class Pathfinding2D : MonoBehaviour
         grid.currentSolutionType = Grid2D.PathSolutionType.Standard;
     }
 
-    private int GetDistance(Node2D nodeA, Node2D nodeB)
+    public int GetDistance(Node2D nodeA, Node2D nodeB)
     {
         int dstX = Mathf.Abs(nodeA.GridX - nodeB.GridX);
         int dstY = Mathf.Abs(nodeA.GridY - nodeB.GridY);
