@@ -9,6 +9,7 @@ public class Grid2D : MonoBehaviour
     public Node2D[,] Grid;
     public Tilemap obstaclemap;
     public int[,] penaltyGrid;
+    public int[,] penaltyTimeGrid;
 
     // Dictionaries for the two solution types.
     public Dictionary<Transform, List<Node2D>> paths = new Dictionary<Transform, List<Node2D>>();
@@ -39,6 +40,15 @@ public class Grid2D : MonoBehaviour
     {
         Grid = new Node2D[gridSizeX, gridSizeY];
         penaltyGrid = new int[gridSizeX, gridSizeY];  // initialize penalty grid
+        // Initialize the temporal grid (use -100 to denote “no penalty time recorded”)
+        penaltyTimeGrid = new int[gridSizeX, gridSizeY];
+        for (int x = 0; x < gridSizeX; x++)
+        {
+            for (int y = 0; y < gridSizeY; y++)
+            {
+                penaltyTimeGrid[x, y] = -100;
+            }
+        }
         worldBottomLeft = transform.position - Vector3.right * gridWorldSize.x / 2 - Vector3.up * gridWorldSize.y / 2;
 
         for (int x = 0; x < gridSizeX; x++)
@@ -64,13 +74,27 @@ public class Grid2D : MonoBehaviour
         return penaltyGrid[node.GridX, node.GridY];
     }
 
+    //Returns the penalty only if the difference between the current step and the recorded penalty time is within the allowed maxDifference; otherwise returns 0.
+    public int GetTemporalPenalty(Node2D node, int currentStep, int maxDifference)
+    {
+        int recordedTime = penaltyTimeGrid[node.GridX, node.GridY];
+        if (currentStep - recordedTime <= maxDifference)
+            return penaltyGrid[node.GridX, node.GridY];
+        else
+            return 0;
+    }
+
     //Add a penalty value to each node along a path
     public void AddPenaltyForPath(List<Node2D> path, int penaltyValue, bool expandPenalty, int neighborPenalty)
     {
-        foreach (Node2D node in path)
+        for (int i = 0; i < path.Count; i++)
         {
+            Node2D node = path[i];
             // Apply penalty to the path cells 
             penaltyGrid[node.GridX, node.GridY] += penaltyValue;
+            // record the time as the index in the path
+            penaltyTimeGrid[node.GridX, node.GridY] = i; 
+
             //Expands the penalty to neighboring cells
             if (expandPenalty)
             {
@@ -88,6 +112,8 @@ public class Grid2D : MonoBehaviour
                         if (nx >= 0 && nx < gridSizeX && ny >= 0 && ny < gridSizeY)
                         {
                             penaltyGrid[nx, ny] += neighborPenalty;
+                            // Record the same time as the parent cell
+                            penaltyTimeGrid[nx, ny] = i;
                         }
                     }
                 }
@@ -102,6 +128,7 @@ public class Grid2D : MonoBehaviour
             for (int y = 0; y < penaltyGrid.GetLength(1); y++)
             {
                 penaltyGrid[x, y] = 0;
+                penaltyTimeGrid[x, y] = -100;
             }
         }
     }

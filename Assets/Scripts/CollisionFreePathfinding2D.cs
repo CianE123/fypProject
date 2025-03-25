@@ -1,5 +1,7 @@
-using System.Collections.Generic;
 using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
 
 public class CollisionFreePathfinding2D : MonoBehaviour
 {
@@ -94,9 +96,9 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         grid = GridOwner.GetComponent<Grid2D>();
     }
 
-    // Finds a collision–free path using a spatiotemporal A* that checks a shared reservation table.
-    // Penalties (if enabled) are added along the found path.
-    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement)
+    // Finds a collision–free path using a temporal A* that checks a shared reservation table.
+    // Penalties (if enabled) are added along the found path also accepts temporal penalty parameters.
+    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement, bool useTemporalPenalty, int maxTemporalDifference)
     {
         if (target == null)
         {
@@ -156,7 +158,16 @@ public class CollisionFreePathfinding2D : MonoBehaviour
                     reservationTable.IsEdgeReserved(current.node, neighbor, nextTime))
                     continue;
 
-                int additionalPenalty = usePenalty ? grid.GetPenalty(neighbor) : 0;
+                // Compute the additional penalty.
+                int additionalPenalty = 0;
+                if (usePenalty)
+                {
+                    if (useTemporalPenalty)
+                        additionalPenalty = grid.GetTemporalPenalty(neighbor, nextTime, maxTemporalDifference);
+                    else
+                        additionalPenalty = grid.GetPenalty(neighbor);
+                }
+
                 int newCost = current.gCost + GetDistance(current.node, neighbor) + additionalPenalty;
 
                 TemporalNode neighborTemporal = new TemporalNode(neighbor, nextTime)
@@ -221,7 +232,7 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         return path;
     }
 
-    // Manhattan-like heuristic.
+    // Manhattan distance 
     private int GetDistance(Node2D a, Node2D b)
     {
         int dstX = Mathf.Abs(a.GridX - b.GridX);
@@ -233,5 +244,4 @@ public class CollisionFreePathfinding2D : MonoBehaviour
     {
         reservationTable = new ReservationTable();
     }
-
 }
