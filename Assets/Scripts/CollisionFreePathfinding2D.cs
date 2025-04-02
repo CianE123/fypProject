@@ -2,7 +2,6 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
-
 public class CollisionFreePathfinding2D : MonoBehaviour
 {
     public Transform target;          // Target for this agent.
@@ -59,7 +58,7 @@ public class CollisionFreePathfinding2D : MonoBehaviour
                 foreach (var edge in edgeReservations[time])
                 {
                     // A reserved edge from 'from' to 'to' means a move in the opposite direction (swapping)
-                    // would conflict.
+                    // would conflict. Check for (to -> from) at the same time step 't'.
                     if (edge.Item1 == to && edge.Item2 == from)
                         return true;
                 }
@@ -89,6 +88,13 @@ public class CollisionFreePathfinding2D : MonoBehaviour
                 edgeReservations[t].Add((from, to));
             }
         }
+
+        // Clears all reservations. Called when starting a new round of pathfinding for all agents.
+        public void ClearReservations()
+        {
+            vertexReservations.Clear();
+            edgeReservations.Clear();
+        }
     }
 
     void Start()
@@ -98,13 +104,24 @@ public class CollisionFreePathfinding2D : MonoBehaviour
 
     // Finds a collision–free path using a temporal A* that checks a shared reservation table.
     // Penalties (if enabled) are added along the found path also accepts temporal penalty parameters.
-    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement, bool useTemporalPenalty, int maxTemporalDifference)
+    // Added useWaitAction parameter.
+    public void FindPath(bool usePenalty, int penaltyIncrement, bool expandPenalty, int neighborPenaltyIncrement, bool useTemporalPenalty, int maxTemporalDifference, bool useWaitAction)
     {
         if (target == null)
         {
             Debug.LogWarning($"{gameObject.name} does not have a target assigned.");
             return;
         }
+        if (grid == null)
+        {
+             grid = GridOwner.GetComponent<Grid2D>();
+             if (grid == null)
+             {
+                Debug.LogError($"{gameObject.name}: Grid2D component not found on GridOwner.");
+                return;
+             }
+        }
+
 
         Node2D startNode = grid.NodeFromWorldPoint(transform.position);
         Node2D goalNode = grid.NodeFromWorldPoint(target.position);
@@ -133,32 +150,106 @@ public class CollisionFreePathfinding2D : MonoBehaviour
             }
 
             // Get the node with the lowest fCost.
-            openList.Sort((a, b) => a.fCost.CompareTo(b.fCost));
+            // Optimization: Consider using a Min-Heap/Priority Queue for better performance than sorting.
+            openList.Sort((a, b) => {
+                int fCostComparison = a.fCost.CompareTo(b.fCost);
+                if (fCostComparison == 0)
+                {
+                    // Tie-breaking: prefer nodes with lower hCost (closer to goal)
+                    return a.hCost.CompareTo(b.hCost);
+                }
+                return fCostComparison;
+            });
             TemporalNode current = openList[0];
             openList.RemoveAt(0);
+
+            // Avoid re-expanding nodes already processed.
+            if (closedSet.Contains((current.node, current.time)))
+            {
+                continue;
+            }
             closedSet.Add((current.node, current.time));
 
+
             // If we've reached the goal, finish.
+            // Check if current node is goal AND not reserved by another agent ending there
             if (current.node == goalNode)
             {
                 endTemporal = current;
                 break;
             }
 
-            // Expand neighbors.
+            int nextTime = current.time + 1;
+
+            // Wait Action Logic
+            if (useWaitAction)
+            {
+                Node2D waitNode = current.node; // Stay in the current node
+
+                // Check vertex reservation for waiting in place.
+                if (!reservationTable.IsVertexReserved(waitNode, nextTime))
+                {
+                    // Calculate cost for waiting.
+                    int additionalPenalty = 0;
+                    if (usePenalty)
+                    {
+                        if (useTemporalPenalty)
+                            additionalPenalty = grid.GetTemporalPenalty(waitNode, nextTime, maxTemporalDifference);
+                        else
+                            additionalPenalty = grid.GetPenalty(waitNode);
+                    }
+
+                    // Cost of waiting is 1 step (like a cardinal move) + penalty.
+                    int waitMoveCost = 10; // Cost equivalent to moving one non-diagonal step.
+                    int newWaitCost = current.gCost + waitMoveCost + additionalPenalty;
+
+                    TemporalNode waitTemporal = new TemporalNode(waitNode, nextTime)
+                    {
+                        gCost = newWaitCost,
+                        hCost = GetDistance(waitNode, goalNode), // Heuristic remains the same.
+                        parent = current
+                    };
+
+                    // Check if already closed or a better path exists in open list.
+                    if (!closedSet.Contains((waitNode, nextTime)))
+                    {
+                        bool skip = false;
+                        // Check open list for a better or equal cost path to the same state.
+                        for (int i = openList.Count - 1; i >= 0; i--) // Iterate backwards for safe removal
+                        {
+                            TemporalNode openNode = openList[i];
+                            if (openNode.node == waitNode && openNode.time == nextTime)
+                            {
+                                if (openNode.gCost <= newWaitCost)
+                                {
+                                    skip = true; // Found a better or equal path already
+                                    break;
+                                }
+                                else
+                                {
+                                    // Found a worse path, remove it to replace with the better one
+                                    openList.RemoveAt(i);
+                                }
+                            }
+                        }
+                        if (!skip)
+                            openList.Add(waitTemporal);
+                    }
+                }
+            }
+
+            // Expand neighbors (Move Actions).
             foreach (Node2D neighbor in grid.GetNeighbors(current.node))
             {
                 if (neighbor.obstacle)
                     continue;
 
-                int nextTime = current.time + 1;
-
-                // Check reservations for vertex and edge conflicts.
+                // Check reservations for vertex and edge conflicts for MOVING to the neighbor.
                 if (reservationTable.IsVertexReserved(neighbor, nextTime) ||
                     reservationTable.IsEdgeReserved(current.node, neighbor, nextTime))
                     continue;
 
-                // Compute the additional penalty.
+                // Compute the additional penalty for moving to the neighbor.
                 int additionalPenalty = 0;
                 if (usePenalty)
                 {
@@ -168,30 +259,52 @@ public class CollisionFreePathfinding2D : MonoBehaviour
                         additionalPenalty = grid.GetPenalty(neighbor);
                 }
 
-                int newCost = current.gCost + GetDistance(current.node, neighbor) + additionalPenalty;
+                int moveCost = GetDistance(current.node, neighbor); // Cost of the move itself
+                int newMoveCost = current.gCost + moveCost + additionalPenalty;
 
-                TemporalNode neighborTemporal = new TemporalNode(neighbor, nextTime)
-                {
-                    gCost = newCost,
-                    hCost = GetDistance(neighbor, goalNode),
-                    parent = current
-                };
-
+                // Check if already closed. If so, we don't need to consider it again.
                 if (closedSet.Contains((neighbor, nextTime)))
                     continue;
 
-                bool skip = false;
+
+                // --- Check Open List ---
+                TemporalNode existingOpenNode = null;
+                // Find if a node for this state (neighbor, nextTime) already exists in the open list
                 foreach (TemporalNode openNode in openList)
                 {
-                    if (openNode.node == neighbor && openNode.time == nextTime && openNode.gCost <= newCost)
+                    if (openNode.node == neighbor && openNode.time == nextTime)
                     {
-                        skip = true;
-                        break;
+                        existingOpenNode = openNode;
+                        break; // Found it
                     }
                 }
-                if (!skip)
-                    openList.Add(neighborTemporal);
-            }
+
+                // Case 1: State (neighbor, nextTime) is already in the Open List
+                if (existingOpenNode != null)
+                {
+                    // Check if the new path TO this state is better (lower gCost)
+                    if (newMoveCost < existingOpenNode.gCost)
+                    {
+                        // Update the existing node with the better path info
+                        existingOpenNode.gCost = newMoveCost;
+                        existingOpenNode.parent = current;
+                        // (If using a priority queue, you'd update its position here)
+                    }
+                    // else: The existing path is better or equal, so we do nothing and 'continue' to the next neighbor.
+                    continue; // Ensures we don't add a duplicate node below
+                }
+
+                // Case 2: State (neighbor, nextTime) is NOT in the Open List (and not in Closed)
+                // Create a new temporal node for this valid, unvisited state
+                TemporalNode neighborTemporal = new TemporalNode(neighbor, nextTime)
+                {
+                    gCost = newMoveCost,
+                    hCost = GetDistance(neighbor, goalNode),
+                    parent = current
+                };
+                openList.Add(neighborTemporal); // Add the new node to the open list
+
+            } 
         }
 
         // If a path was found, retrace it, apply penalties, reserve it, and store it for drawing.
@@ -207,13 +320,15 @@ public class CollisionFreePathfinding2D : MonoBehaviour
             // For drawing, remove the starting node to match Pathfinding2D.
             List<Node2D> displayPath = new List<Node2D>(path);
             if (displayPath.Count > 0)
-                displayPath.RemoveAt(0);
-            grid.SetCollisionFreePath(transform, displayPath);
+                displayPath.RemoveAt(0); // Keep the start node for reservation but not display/movement? Check AgentMover logic. Usually, the path for mover includes the start node. Let's keep it consistent for now. Maybe AgentMover handles the first node.
+            grid.SetCollisionFreePath(transform, path); // Store the full path including start node
             grid.currentSolutionType = Grid2D.PathSolutionType.CollisionFree;
         }
         else
         {
             Debug.LogWarning($"{gameObject.name} could not find a collision–free path.");
+             // Optionally clear the path for this agent if none was found
+            grid.SetCollisionFreePath(transform, new List<Node2D>());
         }
     }
 
@@ -222,8 +337,8 @@ public class CollisionFreePathfinding2D : MonoBehaviour
     {
         List<Node2D> path = new List<Node2D>();
         TemporalNode current = end;
-        
-        while (current != null)
+
+        while (current != null) // Changed condition from current != start to current != null to include start node
         {
             path.Add(current.node);
             current = current.parent;
@@ -232,16 +347,26 @@ public class CollisionFreePathfinding2D : MonoBehaviour
         return path;
     }
 
-    // Manhattan distance 
+    // Manhattan distance heuristic (Adjusted for diagonal movement)
     private int GetDistance(Node2D a, Node2D b)
     {
         int dstX = Mathf.Abs(a.GridX - b.GridX);
         int dstY = Mathf.Abs(a.GridY - b.GridY);
+        // Using standard diagonal distance costs (14 for diagonal, 10 for cardinal)
         return (dstX > dstY) ? 14 * dstY + 10 * (dstX - dstY) : 14 * dstX + 10 * (dstY - dstX);
     }
 
+    // Static method to reset the shared reservation table.
     public static void ResetReservationTable()
     {
-        reservationTable = new ReservationTable();
+        // Ensure the instance exists before clearing.
+        if (reservationTable == null)
+        {
+            reservationTable = new ReservationTable();
+        }
+        else
+        {
+            reservationTable.ClearReservations(); // Use the new clear method
+        }
     }
 }
