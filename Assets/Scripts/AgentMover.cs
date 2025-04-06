@@ -125,10 +125,7 @@ public class AgentMover : MonoBehaviour
         // Note: The path from CollisionFree includes the start node at index 0.
         if (currentPathIndex == 0)
         {
-            startPositionForStep = activePath[0].worldPosition; // Start at the first node's position
-             // Ensure agent starts exactly at the first node when movement begins
-             // Use transform.position only if path is empty or index is wrong somehow, otherwise trust the path.
-             transform.position = startPositionForStep;
+            startPositionForStep = transform.position;
         }
         else
         {

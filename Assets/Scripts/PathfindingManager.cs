@@ -2,6 +2,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Diagnostics; // Required for Stopwatch
 
 public class PathfindingManager : MonoBehaviour
 {
@@ -20,9 +21,12 @@ public class PathfindingManager : MonoBehaviour
     // Toggle for collision-free pathfinding
     public bool collisionFree = false;
     // Toggle to allow agents to wait in place in collision-free mode
-    public bool useWaitAction = false; // Added toggle, default to true
+    public bool useWaitAction = true;
     // Toggle to reverse the scheduling order (largest distance first if true)
     public bool reverseOrder = false;
+
+    // Variable for Stopwatch
+    private Stopwatch pathfindingTimer = new Stopwatch();
 
     void Update()
     {
@@ -52,17 +56,26 @@ public class PathfindingManager : MonoBehaviour
         if (grid != null)
         {
             grid.ResetPenaltyGrid();
+            // Also clear previous paths before recalculating
+            grid.paths.Clear();
+            grid.collisionFreePaths.Clear();
         }
         else
         {
-            Debug.LogError("PathfindingManager: Grid2D not found in the scene!");
+            UnityEngine.Debug.LogError("PathfindingManager: Grid2D not found in the scene!"); // Use UnityEngine.Debug to avoid ambiguity
             return;
         }
+
+        // --- Start Timing ---
+        pathfindingTimer.Reset();
+        pathfindingTimer.Start();
+
+        long totalPathSteps = 0; // Use long in case of many agents/long paths
 
         // For both standard and collision-free cases, we sort agents based on their distance from target.
         if (!collisionFree)
         {
-            // Process standard pathfinding agents.
+            // --- Standard Pathfinding ---
             Pathfinding2D[] pathfinders = FindObjectsOfType<Pathfinding2D>();
 
             // Sort agents based on Manhattan distance from their current position to target.
@@ -87,7 +100,6 @@ public class PathfindingManager : MonoBehaviour
             {
                 if (agent != null && agent.target != null) // Check target exists
                 {
-                    // Note: Standard pathfinding doesn't use the wait action toggle
                     agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement, useTemporalPenalty, maxTemporalDifference);
 
                     // Reset the movement progress (if an AgentMover is attached).
@@ -96,8 +108,12 @@ public class PathfindingManager : MonoBehaviour
                         mover.ResetPathProgress();
                 }
             }
+            // --- Sum path lengths after calculation ---
+             if (grid.paths != null)
+                totalPathSteps = grid.paths.Values.Sum(path => (long)(path?.Count ?? 0)); // Sum lengths from standard paths dictionary
+
         }
-        else // Collision-Free Pathfinding
+        else // --- Collision-Free Pathfinding ---
         {
             // Reset reservations before processing any agent
             CollisionFreePathfinding2D.ResetReservationTable();
@@ -126,7 +142,6 @@ public class PathfindingManager : MonoBehaviour
             {
                 if (agent != null && agent.target != null) // Check target exists
                 {
-                    // Pass the useWaitAction toggle here
                     agent.FindPath(usePenalty, penaltyIncrement, expandPenalty, neighborPenaltyIncrement, useTemporalPenalty, maxTemporalDifference, useWaitAction);
 
                     // Reset the movement progress.
@@ -135,7 +150,22 @@ public class PathfindingManager : MonoBehaviour
                         mover.ResetPathProgress();
                 }
             }
+            // --- Sum path lengths after calculation ---
+            if (grid.collisionFreePaths != null)
+                totalPathSteps = grid.collisionFreePaths.Values.Sum(path => (long)(path?.Count ?? 0)); // Sum lengths from collision-free paths dictionary
+
         }
+
+        // --- Stop Timing ---
+        pathfindingTimer.Stop();
+
+        // --- Log Results ---
+        string algorithmType = collisionFree ? "Collision-Free" : "Standard";
+        UnityEngine.Debug.Log($"--- Pathfinding Calculation Complete ({algorithmType}) ---");
+        UnityEngine.Debug.Log($"Computation Time: {pathfindingTimer.ElapsedMilliseconds} ms");
+        UnityEngine.Debug.Log($"Total Path Steps (Sum of all agents' path lengths): {totalPathSteps}");
+        UnityEngine.Debug.Log($"-----------------------------------------------------");
+
     }
 
     // Helper method for Manhattan distance calculation (using diagonal costs).
@@ -166,14 +196,19 @@ public class PathfindingManager : MonoBehaviour
         {
             mover.ResetPosition();
         }
-        // Also clear any existing drawn paths and reservations if needed
+        // Also clear any existing drawn paths and reservations/penalties
          Grid2D grid = FindObjectOfType<Grid2D>();
         if (grid != null)
         {
              grid.paths.Clear();
              grid.collisionFreePaths.Clear();
              grid.ResetPenaltyGrid(); // Reset penalties too
+             // Force redraw if gizmos depend on path data
+             #if UNITY_EDITOR
+             UnityEditor.SceneView.RepaintAll();
+             #endif
         }
         CollisionFreePathfinding2D.ResetReservationTable(); // Reset reservations
+        UnityEngine.Debug.Log("Agent Positions Reset"); // Log reset
     }
 }
